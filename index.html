@@ -212,15 +212,6 @@
   }
 
   /* CHECKBOX */
-  .check-wrap {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    cursor: pointer;
-  }
-
-  .check-wrap input[type="checkbox"] { display: none; }
-
   .check-box {
     width: 22px;
     height: 22px;
@@ -235,7 +226,7 @@
     flex-shrink: 0;
   }
 
-  .check-box svg { display: none; }
+  .check-box svg { display: none; pointer-events: none; }
   .listened .check-box { background: var(--green); border-color: var(--green); }
   .listened .check-box svg { display: block; }
 
@@ -755,8 +746,12 @@ let openCard = null;
 
 function toggleListened(id, e) {
   e.stopPropagation();
-  listened[id] = !listened[id];
-  if (!listened[id]) delete listened[id];
+  e.preventDefault();
+  if (listened[id]) {
+    delete listened[id];
+  } else {
+    listened[id] = true;
+  }
   saveListened(listened);
   renderAll();
 }
@@ -827,12 +822,9 @@ function renderPieces() {
       const isOpen = openCard === p.id;
       html += `<div class="piece-card${isListened ? ' listened' : ''}${isOpen ? ' open' : ''}" id="card_${p.id}">
         <div class="piece-row" onclick="toggleCard('${p.id}')">
-          <label class="check-wrap" onclick="toggleListened('${p.id}', event)" title="${isListened ? 'Mark as unlistened' : 'Mark as listened'}">
-            <input type="checkbox" ${isListened ? 'checked' : ''} />
-            <div class="check-box">
-              <svg width="12" height="12" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-          </label>
+          <div class="check-box" onclick="toggleListened('${p.id}', event)" title="${isListened ? 'Mark as unlistened' : 'Mark as listened'}" role="checkbox" aria-checked="${isListened}" tabindex="0">
+            <svg width="12" height="12" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
           <div class="piece-info">
             <div class="piece-composer">${p.composer}</div>
             <div class="piece-name">${p.name}</div>
