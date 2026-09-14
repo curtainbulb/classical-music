@@ -307,8 +307,41 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* ── Filter controls ─────────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
+/* ── Init + filter wiring (single DOMContentLoaded) ─────────────────────── */
+function init() {
+  loadState();
+
+  const nav = document.getElementById('era-nav-inner');
+  const main = document.getElementById('main');
+
+  // Build era tabs and sections
+  ERAS.forEach((era, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'era-tab' + (i === 0 ? ' active' : '');
+    btn.dataset.era = era.id;
+    btn.innerHTML = `
+      <span class="era-tab-name">${era.name}</span>
+      <span class="era-tab-period">${era.period}</span>
+    `;
+    nav.appendChild(btn);
+
+    const section = document.createElement('section');
+    section.className = 'era-section' + (i === 0 ? ' active' : '');
+    section.id = 'era-' + era.id;
+    section.innerHTML = `
+      <div class="era-header" data-name="${era.name}">
+        <div class="era-header-inner">
+          <h2 class="era-name">${era.name}</h2>
+          <div class="era-period">${era.period}</div>
+          <p class="era-desc">${escHtml(era.desc)}</p>
+        </div>
+      </div>
+      <div class="works-list"></div>
+    `;
+    main.appendChild(section);
+  });
+
+  // Wire filter buttons (they exist in static HTML, safe to query now)
   const filterBtns = document.querySelectorAll('.filter-btn');
   filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -337,6 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Wire search
   const searchInput = document.getElementById('search-input');
   let searchTimer;
   searchInput.addEventListener('input', () => {
@@ -346,45 +380,16 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAll();
     }, 180);
   });
-});
-
-/* ── Init ────────────────────────────────────────────────────────────────── */
-function init() {
-  loadState();
-
-  const nav = document.getElementById('era-nav-inner');
-  const main = document.getElementById('main');
-
-  ERAS.forEach((era, i) => {
-    // Nav tab
-    const btn = document.createElement('button');
-    btn.className = 'era-tab' + (i === 0 ? ' active' : '');
-    btn.dataset.era = era.id;
-    btn.innerHTML = `
-      <span class="era-tab-name">${era.name}</span>
-      <span class="era-tab-period">${era.period}</span>
-    `;
-    nav.appendChild(btn);
-
-    // Era section
-    const section = document.createElement('section');
-    section.className = 'era-section' + (i === 0 ? ' active' : '');
-    section.id = 'era-' + era.id;
-    section.innerHTML = `
-      <div class="era-header" data-name="${era.name}">
-        <div class="era-header-inner">
-          <h2 class="era-name">${era.name}</h2>
-          <div class="era-period">${era.period}</div>
-          <p class="era-desc">${escHtml(era.desc)}</p>
-        </div>
-      </div>
-      <div class="works-list"></div>
-    `;
-    main.appendChild(section);
-  });
 
   renderAll();
   switchEra(ERAS[0].id);
 }
 
-init();
+// With defer, scripts run after HTML is parsed (readyState = 'interactive' or
+// 'complete'). Either way the DOM is ready — call init() immediately.
+// Fallback: if somehow still loading, wait for DOMContentLoaded.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init(); // 'interactive' or 'complete' — DOM is ready
+}
