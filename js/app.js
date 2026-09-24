@@ -1,395 +1,400 @@
-/* ── State ──────────────────────────────────────────────────────────────── */
-const STORAGE_KEY = 'canon_v1';
-const APPLE_CACHE_PREFIX = 'apple_id_';
+(() => {
+  'use strict';
 
-let state = {
-  activeEra: ERAS[0].id,
-  listened: {},
-  filters: { phase: null, gateway: false, listened: false },
-  search: '',
-};
+  const ERA_BY_ID = Object.fromEntries(ERAS.map(e => [e.id, e]));
+  const eraOrder = ERAS.map(e => e.id);
+  WORKS.sort((a, b) => eraOrder.indexOf(a.era) - eraOrder.indexOf(b.era));
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw);
-      state.listened = saved.listened || {};
+  const state = {
+    mode: 'all',       // 'all' | 'gateway'
+    query: '',
+    activeEra: ERAS[0].id,
+    paletteIndex: 0,
+    paletteResults: [],
+    resolved: {},      // populated from data/apple-music-resolved.json, if present
+  };
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  /* ---------- Apple Music resolution ---------- */
+  function appleMusicFor(work) {
+    const resolved = state.resolved[work.id];
+    if (resolved && resolved.status === 'resolved' && resolved.url) {
+      return { url: resolved.url, verified: true };
     }
-  } catch (e) { /* fresh start */ }
-}
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ listened: state.listened }));
-  } catch (e) {}
-}
-
-/* ── Apple Music ────────────────────────────────────────────────────────── */
-async function getAppleMusicUrl(searchTerm, workId) {
-  const cacheKey = APPLE_CACHE_PREFIX + workId;
-  try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) return JSON.parse(cached);
-  } catch (e) {}
-
-  try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&entity=album&limit=3&media=music`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.results?.length) return null;
-
-    const album = data.results[0];
-    const result = {
-      musicUrl: `music://music.apple.com/us/album/${album.collectionId}`,
-      webUrl: album.collectionViewUrl,
-      name: album.collectionName,
-    };
-    try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch (e) {}
-    return result;
-  } catch (e) {
-    return null;
-  }
-}
-
-/* ── Filtering ──────────────────────────────────────────────────────────── */
-function filteredWorks(eraId) {
-  let works = WORKS.filter(w => w.era === eraId);
-
-  if (state.search.length > 1) {
-    const q = state.search.toLowerCase();
-    works = works.filter(w =>
-      w.composer.toLowerCase().includes(q) ||
-      w.title.toLowerCase().includes(q) ||
-      w.form.toLowerCase().includes(q) ||
-      (w.best || '').toLowerCase().includes(q)
-    );
+    if (work.appleUrl) {
+      return { url: work.appleUrl, verified: !!work.appleVerified };
+    }
+    const term = encodeURIComponent(work.apple || `${work.composer} ${work.title}`);
+    return { url: `https://music.apple.com/us/search?term=${term}`, verified: false };
   }
 
-  if (state.filters.phase) {
-    works = works.filter(w => w.phase === state.filters.phase);
-  }
+  /* ---------- Rendering ---------- */
+  function renderWorkRow(work, indexInEra) {
+    const li = document.createElement('div');
+    li.className = 'work';
+    li.dataset.id = work.id;
+    li.dataset.composer = work.composer.toLowerCase();
+    li.dataset.title = work.title.toLowerCase();
+    li.dataset.gateway = work.gateway ? '1' : '0';
+    li.dataset.era = work.era;
 
-  if (state.filters.gateway) {
-    works = works.filter(w => w.gateway);
-  }
+    const rowId = `work-${work.id}`;
+    const panelId = `panel-${work.id}`;
 
-  if (state.filters.listened) {
-    works = works.filter(w => !state.listened[w.id]);
-  }
-
-  return works;
-}
-
-/* ── Progress ────────────────────────────────────────────────────────────── */
-function updateProgress() {
-  const total = WORKS.length;
-  const done = WORKS.filter(w => state.listened[w.id]).length;
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  document.getElementById('progress-bar').style.width = pct + '%';
-  document.getElementById('progress-label').textContent = `${done} of ${total} listened`;
-}
-
-/* ── Rendering ───────────────────────────────────────────────────────────── */
-function renderEra(eraId) {
-  const era = ERAS.find(e => e.id === eraId);
-  if (!era) return;
-
-  // Update CSS variables for this era
-  document.documentElement.style.setProperty('--era-bg', era.bg);
-  document.documentElement.style.setProperty('--era-fg', era.fg);
-  document.documentElement.style.setProperty('--era-accent', era.accent);
-  document.documentElement.style.setProperty('--era-mid', era.mid);
-
-  const section = document.getElementById('era-' + eraId);
-  const list = section.querySelector('.works-list');
-  const works = filteredWorks(eraId);
-
-  list.innerHTML = '';
-
-  if (works.length === 0) {
-    list.innerHTML = '<div class="empty-state">No works match the current filters.</div>';
-    return;
-  }
-
-  works.forEach(work => {
-    const listened = !!state.listened[work.id];
-    const row = document.createElement('div');
-    row.className = 'work-row' + (listened ? ' listened' : '');
-    row.dataset.id = work.id;
-
-    row.innerHTML = `
-      <div class="work-summary" role="button" tabindex="0" aria-expanded="false">
-        <div class="work-badges">
-          <div class="phase-badge p${work.phase}" title="Phase ${work.phase}">${work.phase}</div>
-          ${work.gateway ? '<div class="gateway-star" title="Gateway work">★</div>' : ''}
-        </div>
-        <div class="work-meta">
-          <div class="work-composer">${escHtml(work.composer)}</div>
-          <div class="work-title">${escHtml(work.title)}</div>
-          <div class="work-detail-line">${escHtml(work.form)} · ${escHtml(work.duration)}</div>
-        </div>
-        <svg class="work-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
-      <div class="work-detail" role="region" aria-label="${escHtml(work.title)} details">
-        <div class="detail-label">Why listen</div>
-        <div class="detail-text">${escHtml(work.why)}</div>
-        <div class="detail-label">Context</div>
-        <div class="detail-text">${escHtml(work.context)}</div>
-        <div class="detail-label">Recommended recording</div>
-        <div class="detail-recording">${escHtml(work.best)}</div>
-        ${work.alt ? `<div class="detail-alt">Also: ${escHtml(work.alt)}</div>` : ''}
-        <div class="detail-actions">
-          ${work.apple ? `<button class="btn-listen" data-id="${work.id}" data-apple="${escAttr(work.apple)}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
-            Open in Apple Music
-          </button>` : ''}
-          <button class="btn-check${listened ? ' checked' : ''}" data-id="${work.id}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              ${listened ? '<polyline points="20 6 9 17 4 12"></polyline>' : '<circle cx="12" cy="12" r="9"></circle>'}
-            </svg>
-            ${listened ? 'Listened' : 'Mark as listened'}
-          </button>
+    li.innerHTML = `
+      <button class="work-row" id="${rowId}" aria-expanded="false" aria-controls="${panelId}">
+        <span class="work-num">${String(indexInEra + 1).padStart(2, '0')}</span>
+        <span class="work-titling">
+          <span class="work-composer">${escapeHtml(work.composer)}</span>
+          <span class="work-title">${escapeHtml(work.title)}</span>
+        </span>
+        <span class="work-meta">
+          ${work.gateway ? '<span class="gateway-mark" title="Gateway work — a good starting point"></span>' : ''}
+          <span>${escapeHtml(work.duration.split('—')[0].split(',')[0].trim())}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </span>
+      </button>
+      <div class="work-detail" id="${panelId}" role="region" aria-labelledby="${rowId}">
+        <div class="work-detail-inner">
+          <div class="work-detail-content"></div>
         </div>
       </div>
     `;
 
-    list.appendChild(row);
-  });
-}
-
-function escHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escAttr(str) {
-  if (!str) return '';
-  return String(str).replace(/"/g, '&quot;');
-}
-
-function renderAll() {
-  ERAS.forEach(era => renderEra(era.id));
-  updateProgress();
-}
-
-/* ── Era switching ───────────────────────────────────────────────────────── */
-function switchEra(eraId) {
-  state.activeEra = eraId;
-
-  document.querySelectorAll('.era-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.era === eraId);
-  });
-
-  document.querySelectorAll('.era-section').forEach(sec => {
-    sec.classList.toggle('active', sec.id === 'era-' + eraId);
-  });
-
-  const era = ERAS.find(e => e.id === eraId);
-  if (era) {
-    document.documentElement.style.setProperty('--era-bg', era.bg);
-    document.documentElement.style.setProperty('--era-fg', era.fg);
-    document.documentElement.style.setProperty('--era-accent', era.accent);
-    document.documentElement.style.setProperty('--era-mid', era.mid);
-
-    // Update search border accent
-    const search = document.getElementById('search-input');
-    if (search === document.activeElement) {
-      search.style.borderColor = era.accent;
-    }
+    li.querySelector('.work-row').addEventListener('click', () => toggleWork(li, work));
+    return li;
   }
 
-  // Scroll active tab into view
-  const activeTab = document.querySelector(`.era-tab[data-era="${eraId}"]`);
-  if (activeTab) {
-    activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }
-  // Scroll content to top
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+  function buildDetail(work) {
+    const apple = appleMusicFor(work);
+    const era = ERA_BY_ID[work.era];
+    const lifespan = work.died ? `${work.born}–${work.died}` : `b. ${work.born}`;
 
-/* ── Event delegation ────────────────────────────────────────────────────── */
-document.addEventListener('click', async (e) => {
-  // Era tab
-  const tab = e.target.closest('.era-tab');
-  if (tab) { switchEra(tab.dataset.era); return; }
+    return `
+      <div class="work-facts">
+        <span><b>${escapeHtml(work.form)}</b></span>
+        <span>${escapeHtml(work.duration)}</span>
+        <span>${escapeHtml(work.when)}</span>
+        <span>${escapeHtml(work.nationality)} · ${lifespan}</span>
+      </div>
 
-  // Work summary toggle
-  const summary = e.target.closest('.work-summary');
-  if (summary && !e.target.closest('.btn-listen, .btn-check')) {
-    const row = summary.closest('.work-row');
-    const wasOpen = row.classList.contains('open');
-    // Close all open rows in this era
-    document.querySelectorAll('.work-row.open').forEach(r => {
-      r.classList.remove('open');
-      r.querySelector('.work-summary').setAttribute('aria-expanded', 'false');
-    });
-    if (!wasOpen) {
-      row.classList.add('open');
-      summary.setAttribute('aria-expanded', 'true');
-    }
-    return;
-  }
+      <div>
+        <span class="field-label">Why it matters</span>
+        <p>${escapeHtml(work.why)}</p>
+      </div>
 
-  // Apple Music button
-  const listenBtn = e.target.closest('.btn-listen');
-  if (listenBtn) {
-    e.stopPropagation();
-    const workId = listenBtn.dataset.id;
-    const searchTerm = listenBtn.dataset.apple;
-    listenBtn.classList.add('loading');
-    listenBtn.textContent = 'Finding…';
+      <div class="context">
+        <span class="field-label">Context</span>
+        <p>${escapeHtml(work.context)}</p>
+      </div>
 
-    const result = await getAppleMusicUrl(searchTerm, workId);
-    listenBtn.classList.remove('loading');
-
-    if (result) {
-      // Try music:// first, fall back to https
-      const a = document.createElement('a');
-      a.href = result.musicUrl;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      // After a short delay, if still here, offer web link
-      setTimeout(() => {
-        listenBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg> Open in Apple Music`;
-      }, 800);
-    } else {
-      listenBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg> Open in Apple Music`;
-      alert('Could not reach the iTunes Search API. Check your connection.');
-    }
-    return;
-  }
-
-  // Mark listened button
-  const checkBtn = e.target.closest('.btn-check');
-  if (checkBtn) {
-    e.stopPropagation();
-    const workId = checkBtn.dataset.id;
-    const nowListened = !state.listened[workId];
-    if (nowListened) {
-      state.listened[workId] = true;
-    } else {
-      delete state.listened[workId];
-    }
-    saveState();
-    renderAll();
-
-    // Re-open the row that was open
-    const newRow = document.querySelector(`.work-row[data-id="${workId}"]`);
-    if (newRow) {
-      newRow.classList.add('open');
-      const sum = newRow.querySelector('.work-summary');
-      if (sum) sum.setAttribute('aria-expanded', 'true');
-    }
-    return;
-  }
-});
-
-// Keyboard support for work rows
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    const summary = e.target.closest('.work-summary');
-    if (summary) {
-      e.preventDefault();
-      summary.click();
-    }
-  }
-});
-
-/* ── Init + filter wiring (single DOMContentLoaded) ─────────────────────── */
-function init() {
-  loadState();
-
-  const nav = document.getElementById('era-nav-inner');
-  const main = document.getElementById('main');
-
-  // Build era tabs and sections
-  ERAS.forEach((era, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'era-tab' + (i === 0 ? ' active' : '');
-    btn.dataset.era = era.id;
-    btn.innerHTML = `
-      <span class="era-tab-name">${era.name}</span>
-      <span class="era-tab-period">${era.period}</span>
-    `;
-    nav.appendChild(btn);
-
-    const section = document.createElement('section');
-    section.className = 'era-section' + (i === 0 ? ' active' : '');
-    section.id = 'era-' + era.id;
-    section.innerHTML = `
-      <div class="era-header" data-name="${era.name}">
-        <div class="era-header-inner">
-          <h2 class="era-name">${era.name}</h2>
-          <div class="era-period">${era.period}</div>
-          <p class="era-desc">${escHtml(era.desc)}</p>
+      <div class="listening-block">
+        ${work.best ? `<div class="rec-col">
+          <div class="rec-label">Recommended recording</div>
+          <div class="rec-name">${escapeHtml(work.best)}</div>
+        </div>` : ''}
+        ${work.alt ? `<div class="rec-col">
+          <div class="rec-label">Also worth hearing</div>
+          <div class="rec-name">${escapeHtml(work.alt)}</div>
+        </div>` : ''}
+        <div>
+          <a class="apple-link ${apple.verified ? '' : 'unverified'}" href="${apple.url}" target="_blank" rel="noopener noreferrer">
+            ${appleGlyph()}
+            ${apple.verified ? 'Listen on Apple Music' : 'Find on Apple Music'}
+          </a>
+          ${apple.verified ? '' : '<div class="verify-note">Destination not individually confirmed — this opens an Apple Music search for the recording above rather than a guessed link.</div>'}
         </div>
       </div>
-      <div class="works-list"></div>
     `;
-    main.appendChild(section);
-  });
+  }
 
-  // Wire filter buttons (they exist in static HTML, safe to query now)
-  const filterBtns = document.querySelectorAll('.filter-btn');
-  filterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const type = btn.dataset.filter;
-      const val = btn.dataset.value;
+  function appleGlyph() {
+    return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm3.5 7.7c-.03.03-1.6.94-1.58 2.8.02 2.23 1.96 2.97 1.98 2.98-.02.06-.31 1.06-1.02 2.09-.62.9-1.27 1.79-2.29 1.81-1 .02-1.32-.59-2.47-.59-1.15 0-1.5.57-2.45.61-.98.04-1.72-.97-2.35-1.86-1.28-1.84-2.26-5.21-.94-7.48.65-1.13 1.82-1.84 3.09-1.86.97-.02 1.87.65 2.47.65.59 0 1.7-.8 2.86-.68.49.02 1.85.2 2.72 1.5-.07.04-1.62.94-1.6 2.03z"/></svg>`;
+  }
 
-      if (type === 'phase') {
-        const newPhase = parseInt(val, 10);
-        if (state.filters.phase === newPhase) {
-          state.filters.phase = null;
-          btn.classList.remove('active');
-        } else {
-          state.filters.phase = newPhase;
-          filterBtns.forEach(b => { if (b.dataset.filter === 'phase') b.classList.remove('active'); });
-          btn.classList.add('active');
-        }
-      } else if (type === 'gateway') {
-        state.filters.gateway = !state.filters.gateway;
-        btn.classList.toggle('active', state.filters.gateway);
-      } else if (type === 'unlistened') {
-        state.filters.listened = !state.filters.listened;
-        btn.classList.toggle('active', state.filters.listened);
+  function toggleWork(li, work, forceOpen) {
+    const content = li.querySelector('.work-detail-content');
+    const row = li.querySelector('.work-row');
+    const willOpen = forceOpen !== undefined ? forceOpen : !li.classList.contains('open');
+
+    if (willOpen) {
+      if (!content.dataset.built) {
+        content.innerHTML = buildDetail(work);
+        content.dataset.built = '1';
       }
+      li.classList.add('open');
+      row.classList.add('expanded');
+      row.setAttribute('aria-expanded', 'true');
+    } else {
+      li.classList.remove('open');
+      row.classList.remove('expanded');
+      row.setAttribute('aria-expanded', 'false');
+    }
+  }
 
-      renderAll();
+  function renderAll() {
+    const main = $('#works-stream');
+    main.innerHTML = '';
+    ERAS.forEach(era => {
+      const works = WORKS.filter(w => w.era === era.id);
+      const section = document.createElement('section');
+      section.className = 'era-section';
+      section.id = `era-${era.id}`;
+      section.dataset.era = era.id;
+      section.style.setProperty('--section-accent', era.accent);
+      section.innerHTML = `
+        <div class="era-head">
+          <div class="era-period">${escapeHtml(era.period)}</div>
+          <h2>${escapeHtml(era.name)}</h2>
+          <p>${escapeHtml(era.desc)}</p>
+        </div>
+        <div class="era-works"></div>
+      `;
+      const list = section.querySelector('.era-works');
+      works.forEach((w, i) => list.appendChild(renderWorkRow(w, i)));
+      main.appendChild(section);
     });
-  });
+    buildRail();
+    applyFilters();
+  }
 
-  // Wire search
-  const searchInput = document.getElementById('search-input');
-  let searchTimer;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      state.search = searchInput.value.trim();
-      renderAll();
-    }, 180);
-  });
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
 
-  renderAll();
-  switchEra(ERAS[0].id);
-}
+  /* ---------- Rail ---------- */
+  function buildRail() {
+    const line = $('#rail-line');
+    line.innerHTML = '';
+    ERAS.forEach((era, i) => {
+      const tick = document.createElement('button');
+      tick.className = 'rail-tick';
+      tick.style.top = `${(i / (ERAS.length - 1)) * 100}%`;
+      tick.dataset.era = era.id;
+      tick.setAttribute('aria-label', `Jump to ${era.name}`);
+      tick.innerHTML = `<span class="rail-tick-label">${escapeHtml(era.name)}</span>`;
+      tick.addEventListener('click', () => {
+        $(`#era-${era.id}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      line.appendChild(tick);
+    });
+  }
 
-// With defer, scripts run after HTML is parsed (readyState = 'interactive' or
-// 'complete'). Either way the DOM is ready — call init() immediately.
-// Fallback: if somehow still loading, wait for DOMContentLoaded.
-if (document.readyState === 'loading') {
+  function setEraTheme(eraId, immediate) {
+    const era = ERA_BY_ID[eraId];
+    if (!era) return;
+    state.activeEra = eraId;
+    const root = document.documentElement;
+    root.style.setProperty('--era-accent', era.accent);
+    root.style.setProperty('--era-bg', era.bg);
+    root.style.setProperty('--era-mid', era.mid);
+    $('#era-readout').textContent = `${era.name} · ${era.period}`;
+    $$('.rail-tick').forEach(t => t.classList.toggle('current', t.dataset.era === eraId));
+    document.body.classList.add('era-tinted');
+  }
+
+  function observeEras() {
+    const sections = $$('.era-section');
+    const io = new IntersectionObserver((entries) => {
+      // pick the entry closest to the top that's intersecting
+      let best = null;
+      entries.forEach(e => {
+        if (e.isIntersecting && (!best || e.boundingClientRect.top < best.boundingClientRect.top)) {
+          if (e.boundingClientRect.top < window.innerHeight * 0.6) best = e;
+        }
+      });
+      if (best) setEraTheme(best.target.dataset.era);
+      updateMobileBar();
+    }, { rootMargin: '-15% 0px -55% 0px', threshold: [0, 0.1, 0.5, 1] });
+    sections.forEach(s => io.observe(s));
+  }
+
+  function updateMobileBar() {
+    const fill = $('#mobile-era-bar-fill');
+    if (!fill) return;
+    const doc = document.documentElement;
+    const scrolled = (window.scrollY) / (doc.scrollHeight - window.innerHeight);
+    fill.style.width = `${Math.min(100, Math.max(0, scrolled * 100))}%`;
+    fill.style.background = 'var(--era-accent)';
+  }
+
+  /* ---------- Filters (Start Here / mode) ---------- */
+  function applyFilters() {
+    const works = $$('.work');
+    let visibleCount = 0;
+    works.forEach(w => {
+      const isGateway = w.dataset.gateway === '1';
+      const passesMode = state.mode === 'all' || isGateway;
+      w.classList.toggle('filtered-hide', !passesMode);
+      if (passesMode) visibleCount++;
+    });
+    ERAS.forEach(era => {
+      const section = $(`#era-${era.id}`);
+      if (!section) return;
+      const anyVisible = $$('.work', section).some(w => !w.classList.contains('filtered-hide'));
+      section.style.display = anyVisible ? '' : 'none';
+    });
+    $('#hero-stats-count').textContent = visibleCount;
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    $('#toggle-gateway').classList.toggle('active', mode === 'gateway');
+    applyFilters();
+    showToast(mode === 'gateway' ? `Start Here — showing ${WORKS.filter(w=>w.gateway).length} gateway works` : `Showing all ${WORKS.length} works`);
+  }
+
+  /* ---------- Command palette ---------- */
+  function openPalette() {
+    $('#palette-overlay').classList.add('open');
+    $('#palette-input').value = '';
+    $('#palette-input').focus();
+    runPaletteSearch('');
+  }
+  function closePalette() {
+    $('#palette-overlay').classList.remove('open');
+  }
+  function runPaletteSearch(q) {
+    const query = q.trim().toLowerCase();
+    let results;
+    if (!query) {
+      results = WORKS.filter(w => w.gateway).slice(0, 8);
+    } else {
+      results = WORKS.filter(w =>
+        w.composer.toLowerCase().includes(query) ||
+        w.title.toLowerCase().includes(query) ||
+        w.form.toLowerCase().includes(query) ||
+        ERA_BY_ID[w.era].name.toLowerCase().includes(query)
+      ).slice(0, 20);
+    }
+    state.paletteResults = results;
+    state.paletteIndex = 0;
+    renderPaletteResults(query);
+  }
+  function renderPaletteResults(query) {
+    const box = $('#palette-results');
+    const empty = $('#palette-empty');
+    if (state.paletteResults.length === 0) {
+      box.innerHTML = '';
+      empty.style.display = 'block';
+      empty.textContent = query ? `No works match "${query}".` : 'Start typing to search composers, titles, or forms.';
+      return;
+    }
+    empty.style.display = 'none';
+    box.innerHTML = state.paletteResults.map((w, i) => `
+      <button class="palette-item ${i === state.paletteIndex ? 'active' : ''}" data-id="${w.id}">
+        <span>
+          <span class="pi-composer">${escapeHtml(w.composer)}</span><br>
+          <span class="pi-title">${escapeHtml(w.title)}</span>
+        </span>
+        <span class="pi-composer">${escapeHtml(ERA_BY_ID[w.era].name)}</span>
+      </button>
+    `).join('');
+    $$('.palette-item', box).forEach(btn => {
+      btn.addEventListener('click', () => selectPaletteResult(btn.dataset.id));
+    });
+  }
+  function selectPaletteResult(id) {
+    closePalette();
+    jumpToWork(id);
+  }
+  function jumpToWork(id) {
+    if (state.mode === 'gateway') setMode('all');
+    const li = document.querySelector(`.work[data-id="${id}"]`);
+    if (!li) return;
+    li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const work = WORKS.find(w => w.id === id);
+    setTimeout(() => toggleWork(li, work, true), 250);
+    li.style.transition = 'background 0.15s';
+    li.style.background = 'var(--bg-raised-2)';
+    setTimeout(() => { li.style.background = ''; }, 900);
+  }
+
+  function surpriseMe() {
+    const pool = state.mode === 'gateway' ? WORKS.filter(w => w.gateway) : WORKS;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    jumpToWork(pick.id);
+    showToast(`${pick.composer} — ${pick.title}`);
+  }
+
+  /* ---------- Toast ---------- */
+  let toastTimer;
+  function showToast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  /* ---------- Keyboard ---------- */
+  function bindKeys() {
+    document.addEventListener('keydown', (e) => {
+      const paletteOpen = $('#palette-overlay').classList.contains('open');
+      if (e.key === '/' && !paletteOpen && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        openPalette();
+        return;
+      }
+      if (!paletteOpen) return;
+      if (e.key === 'Escape') { closePalette(); return; }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        state.paletteIndex = Math.min(state.paletteIndex + 1, state.paletteResults.length - 1);
+        renderPaletteResults($('#palette-input').value.trim().toLowerCase());
+        scrollActiveIntoView();
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        state.paletteIndex = Math.max(state.paletteIndex - 1, 0);
+        renderPaletteResults($('#palette-input').value.trim().toLowerCase());
+        scrollActiveIntoView();
+      }
+      if (e.key === 'Enter') {
+        const w = state.paletteResults[state.paletteIndex];
+        if (w) selectPaletteResult(w.id);
+      }
+    });
+  }
+  function scrollActiveIntoView() {
+    const active = $('.palette-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  /* ---------- Init ---------- */
+  async function loadResolvedAppleMusic() {
+    try {
+      const res = await fetch('data/apple-music-resolved.json', { cache: 'no-store' });
+      if (res.ok) state.resolved = await res.json();
+    } catch {
+      // No resolved-links file yet (or offline) — static/fallback links still work fine.
+    }
+  }
+
+  async function init() {
+    await loadResolvedAppleMusic();
+    renderAll();
+    setEraTheme(ERAS[0].id);
+    observeEras();
+    bindKeys();
+
+    $('#hero-stats-total').textContent = WORKS.length;
+    $('#hero-stats-composers').textContent = new Set(WORKS.map(w => w.composer)).size;
+
+    $('#search-trigger').addEventListener('click', openPalette);
+    $('#palette-overlay').addEventListener('click', (e) => { if (e.target.id === 'palette-overlay') closePalette(); });
+    $('#palette-close')?.addEventListener('click', closePalette);
+    $('#palette-input').addEventListener('input', (e) => runPaletteSearch(e.target.value));
+
+    $('#toggle-gateway').addEventListener('click', () => setMode(state.mode === 'gateway' ? 'all' : 'gateway'));
+    $('#surprise-btn').addEventListener('click', surpriseMe);
+    $('#hero-start').addEventListener('click', () => { setMode('gateway'); $(`#era-${ERAS[0].id}`).scrollIntoView({behavior:'smooth'}); });
+    $('#hero-search').addEventListener('click', openPalette);
+
+    window.addEventListener('scroll', updateMobileBar, { passive: true });
+  }
+
   document.addEventListener('DOMContentLoaded', init);
-} else {
-  init(); // 'interactive' or 'complete' — DOM is ready
-}
+})();

@@ -1,0 +1,38 @@
+{
+  "b1": {
+    "status": "resolved",
+    "url": "https://music.apple.com/us/album/vivaldi-the-four-seasons/307106268",
+    "confidence": 1.0,
+    "matchedAlbum": "Vivaldi: the Four Seasons",
+    "matchedArtist": "Europa Galante & Fabio Biondi",
+    "resolvedAt": "2026-09-24T00:00:00.000Z",
+    "method": "manual-search-verified"
+  },
+  "b2": {
+    "status": "resolved",
+    "url": "https://music.apple.com/us/album/bach-unaccompanied-cello-suites-remastered/381515547",
+    "confidence": 1.0,
+    "matchedAlbum": "Bach: Cello Suites Nos. 1-6, BWV 1007-1012 (2009 Remaster)",
+    "matchedArtist": "Yo-Yo Ma",
+    "resolvedAt": "2026-09-24T00:00:00.000Z",
+    "method": "manual-search-verified"
+  },
+  "beet1": {
+    "status": "resolved",
+    "url": "https://music.apple.com/us/album/beethoven-symphony-no-5-the-works/1452618050",
+    "confidence": 1.0,
+    "matchedAlbum": "Beethoven: Symphony No. 5 (The Works)",
+    "matchedArtist": "Carlos Kleiber & Vienna Philharmonic",
+    "resolvedAt": "2026-09-24T00:00:00.000Z",
+    "method": "manual-search-verified"
+  },
+  "beet2": {
+    "status": "resolved",
+    "url": "https://music.apple.com/us/album/beethoven-symphony-no-9-op-125/945876404",
+    "confidence": 1.0,
+    "matchedAlbum": "Beethoven: Symphony No. 9 in D Minor, Op. 125 (Live at Bayreuth, 1951)",
+    "matchedArtist": "Wilhelm Furtwängler, Bayreuth Festival Orchestra & Chorus",
+    "resolvedAt": "2026-09-24T00:00:00.000Z",
+    "method": "manual-search-verified"
+  }
+}

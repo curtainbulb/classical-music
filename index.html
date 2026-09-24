@@ -3,50 +3,94 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0a0a0a">
-  <title>Canon — A Classical Music Curriculum</title>
+  <meta name="theme-color" content="#0b0906">
+  <title>Canon — 101 Essential Classical Works</title>
+  <meta name="description" content="A chronological listening companion through 101 essential classical works, from Hildegard of Bingen to Kaija Saariaho — with honest, verified Apple Music links.">
 
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap"></noscript>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
 
   <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:,">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to works</a>
 
-  <!-- Era navigation -->
-  <nav id="era-nav" aria-label="Musical eras">
-    <div id="era-nav-inner"></div>
+  <!-- Top bar -->
+  <header id="topbar">
+    <div id="wordmark"><span class="tick">◆</span> Canon</div>
+    <span id="era-readout"></span>
+    <div id="topbar-actions">
+      <button class="icon-btn" id="toggle-gateway" title="Show only gateway works — the best starting points">
+        Start Here
+      </button>
+      <button class="icon-btn" id="surprise-btn" title="Jump to a random work">
+        Surprise
+      </button>
+      <button class="icon-btn" id="search-trigger" title="Search (press /)">
+        Search <kbd>/</kbd>
+      </button>
+    </div>
+  </header>
+
+  <div id="mobile-era-bar"><div id="mobile-era-bar-fill"></div></div>
+
+  <!-- Position rail -->
+  <nav id="rail" aria-label="Era timeline">
+    <div id="rail-line"></div>
   </nav>
 
-  <!-- Progress indicator -->
-  <div id="progress-bar-wrap" role="progressbar" aria-label="Listening progress">
-    <div id="progress-bar"></div>
+  <main id="main">
+    <!-- Hero -->
+    <section id="hero">
+      <div class="kicker">A listening companion — Baroque to now</div>
+      <h1>One hundred works.<br>Heard <em>in order</em>, on purpose.</h1>
+      <p class="lede">
+        Three and a half centuries of music, arranged as a single walk rather than a catalogue.
+        Start anywhere, or follow the gateway thread — the works chosen as the best possible
+        first hearing of each era. Every entry links to a specific recording, not just a piece.
+      </p>
+      <div id="hero-actions">
+        <button class="btn primary" id="hero-start">Follow the gateway thread</button>
+        <button class="btn" id="hero-search">Search the 101 <kbd>/</kbd></button>
+      </div>
+      <div id="hero-stats">
+        <div><span class="n"><span id="hero-stats-total">101</span></span><span class="l">WORKS</span></div>
+        <div><span class="n"><span id="hero-stats-composers">—</span></span><span class="l">COMPOSERS</span></div>
+        <div><span class="n">6</span><span class="l">ERAS, 1600–1986</span></div>
+        <div><span class="n"><span id="hero-stats-count">101</span></span><span class="l">SHOWN NOW</span></div>
+      </div>
+    </section>
+
+    <div id="works-stream"></div>
+
+    <footer id="site-footer">
+      <p>
+        Built as a listening guide, not an encyclopedia — recommended recordings reflect one
+        reasonable starting point each, not a definitive ranking. Apple Music links marked
+        <em>unverified</em> open a search for the named recording rather than a guessed direct link;
+        see the resolver script in the repository for how the verified links were confirmed.
+      </p>
+      <div class="footer-links">
+        <a href="https://github.com" target="_blank" rel="noopener">Source</a>
+        <a href="#hero">Back to top</a>
+      </div>
+    </footer>
+  </main>
+
+  <!-- Command palette -->
+  <div id="palette-overlay" role="dialog" aria-modal="true" aria-label="Search works">
+    <div id="palette">
+      <input id="palette-input" type="text" placeholder="Search composer, title, form, era…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="palette-results"></div>
+      <div id="palette-empty"></div>
+      <div id="palette-hint"><span><kbd>↑↓</kbd> navigate</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></div>
+    </div>
   </div>
 
-  <!-- Utility bar: search + filters -->
-  <div id="util-bar" role="search">
-    <input
-      id="search-input"
-      type="search"
-      placeholder="Search composer, title, form…"
-      autocomplete="off"
-      autocorrect="off"
-      spellcheck="false"
-      aria-label="Search works"
-    >
-    <button class="filter-btn" data-filter="phase" data-value="1" title="Phase 1 — no prior knowledge needed">Phase 1</button>
-    <button class="filter-btn" data-filter="phase" data-value="2" title="Phase 2 — rewards some familiarity">Phase 2</button>
-    <button class="filter-btn" data-filter="phase" data-value="3" title="Phase 3 — needs context from phases 1 and 2">Phase 3</button>
-    <button class="filter-btn" data-filter="gateway" title="Gateway works — the best starting points">Gateway</button>
-    <button class="filter-btn" data-filter="unlistened" title="Hide listened works">To hear</button>
-  </div>
-
-  <div id="progress-label" aria-live="polite"></div>
-
-  <!-- Main content — era sections injected here by app.js -->
-  <main id="main"></main>
+  <div id="toast"></div>
 
   <script src="data/eras.js" defer></script>
   <script src="data/works.js" defer></script>

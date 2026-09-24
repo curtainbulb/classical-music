@@ -1,5 +1,15 @@
 const ERAS = [
   {
+    id: 'early',
+    name: 'Medieval & Renaissance',
+    period: 'c. 1100–1610',
+    desc: 'Music before the concert hall: chant in convent and cathedral, then interweaving vocal lines of growing complexity. Hildegard writes a whole drama in plainchant; Machaut composes the first complete polyphonic Mass; Palestrina and Tallis perfect voices moving in balance, up to Tallis\'s forty-part motet. The sound is modal, unhurried and built for stone acoustics.',
+    bg: '#0f1a12',
+    fg: '#dfe6d2',
+    accent: '#8aa657',
+    mid: '#18261b'
+  },
+  {
     id: 'baroque',
     name: 'Baroque',
     period: '1600–1750',
@@ -52,7 +62,7 @@ const ERAS = [
   {
     id: 'modern',
     name: '20th Century',
-    period: '1920–1980',
+    period: '1920–today',
     desc: 'A century of violent rupture and invention. Shostakovich composes under Stalin\'s surveillance, encoding defiance in music forced to sound triumphant. Bartók fuses folk music with modernism. Messiaen hears colour in sound. The old rules are gone — what replaces them is a hundred competing answers.',
     bg: '#090909',
     fg: '#c8caca',
